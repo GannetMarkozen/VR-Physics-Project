@@ -23,5 +23,7 @@ class VRPROJECT4_API IInteractInterface
 	// Add interface functions to this class. This is the class that will be inherited to implement this interface.
 public:
 	virtual void OnTriggerPressed() { UE_LOG(LogTemp, Warning, TEXT("OnTriggerPressed no implementation")); }
+	virtual void OnTriggerReleased() { UE_LOG(LogTemp, Warning, TEXT("OnTriggerReleased no implementation")); }
+	
 	virtual void OnTriggerAxis(const float Value) { UE_LOG(LogTemp, Warning, TEXT("OnTriggerPressed no implementation")); }
 };

@@ -2,6 +2,8 @@
 
 
 #include "VRCharacterBase.h"
+#include "VRProject4/DebugMessage.h"
+
 #include "GraspingHand.h"
 #include "Grippables/GrippableStaticMeshComponent.h"
 #include "Grippables/HandSocketComponent.h"

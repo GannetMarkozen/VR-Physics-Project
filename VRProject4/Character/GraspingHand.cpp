@@ -2,6 +2,7 @@
 
 
 #include "GraspingHand.h"
+#include "VRProject4/DebugMessage.h"
 
 #include "VRCharacterBase.h"
 
@@ -62,6 +63,8 @@ void AGraspingHand::BeginPlay()
 {
 	Super::BeginPlay();
 
+	Mesh->OnComponentHit.AddDynamic(this, &AGraspingHand::OnMeshHit);
+
 	// Init welded bone driver
 	PhysicalAnimation->SetSkeletalMeshComponent(Mesh);
 	PhysicalAnimation->SetupWeldedBoneDriver({RootBone});
@@ -112,9 +115,14 @@ void AGraspingHand::GrabSphereEndOverlap(UPrimitiveComponent* OverlappedComponen
 	}*/
 }
 
+void AGraspingHand::OnMeshHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, const FVector NormalImpulse, const FHitResult& Hit)
+{
+	
+}
+
 void AGraspingHand::OnGrippedObject(const FBPActorGripInformation& GripInfo)
 {
-	if(GripSlotPrefix == FName("Primary"))
+	if(GripInfo.bIsSlotGrip && GripSlotPrefix == FName("Primary"))
 	{
 		InteractInterface = Cast<IInteractInterface>(GrabObject);
 		const FString Message = InteractInterface ? "has interact interface" : "does not have interact interface";
@@ -132,7 +140,7 @@ bool AGraspingHand::Grab()
 {
 	if(QueryGrabObject() && GrabObject)
 	{
-		if(TryGrabBySocket()) return true;
+		if(TryPrimaryGrab()) return true;
 		if(TrySecondaryGrab()) return true;
 		DefaultGrab();
 	}
@@ -170,7 +178,7 @@ void AGraspingHand::ReleaseGrab()
 
 	// Init variables
 	GripSlotPrefix = NAME_None;
-	GrabObject = nullptr;
+	GrabObject = nullptr; 
 	InteractInterface = nullptr;
 }
 
@@ -293,19 +301,21 @@ bool AGraspingHand::QueryGrabObject()
 }
 
 
-bool AGraspingHand::TryGrabBySocket()
+bool AGraspingHand::TryPrimaryGrab()
 {
 	if(!GrabObject) return false;
 	
-	// Search for the closest primary grip socket in range if the other hand is not currently holding that primary grip socket
+	// Check if there is a HandSocketComponent in range with the SlotPrefix "Primary"
 	bool bHadPrimarySlot; FTransform SlotWorldTransform; FName SlotName;
 	IVRGripInterface::Execute_ClosestGripSlotInRange(GrabObject, MotionController->GetPivotLocation(), false, bHadPrimarySlot, SlotWorldTransform, SlotName, MotionController, FName("Primary"));
-	
 	if(bHadPrimarySlot)
 	{
 		// Get VRHandSocketComponent by SlotName
 		if(UVRHandSocketComponent* HandSocket = Cast<UVRHandSocketComponent>(UHandSocketComponent::GetHandSocketComponentFromObject(GrabObject, SlotName)))
 		{
+			// If grip laterality is incompatible with hand laterality, return false
+			if(IsCompatibleGrip(HandSocket->GetGripLaterality()) == false) return false;
+			
 			// If the other hand is holding the same object at the primary slot, swap hands
 			if(OtherHand->GrabObject == GrabObject && OtherHand->GripSlotPrefix == FName("Primary"))
 				OtherHand->ReleaseGrab();
@@ -336,7 +346,7 @@ bool AGraspingHand::TrySecondaryGrab()
 	// If there is no primary socket in range, query whether the other hand is holding this object in the Primary slot and whether this object allows multiple grips
 	if(OtherHand->GrabObject == GrabObject && OtherHand->GripSlotPrefix == FName("Primary"))
 	{
-		// Search object for secondary grip in range
+		// Check if there is a HandSocketComponent in range with the SlotPrefix "Secondary"
 		bool bHadSecondarySlot; FTransform SlotWorldTransform; FName SlotName;
 		IVRGripInterface::Execute_ClosestGripSlotInRange(GrabObject, MotionController->GetPivotLocation(), true, bHadSecondarySlot, SlotWorldTransform, SlotName, MotionController, FName("Secondary"));
 		if(bHadSecondarySlot)
@@ -344,11 +354,14 @@ bool AGraspingHand::TrySecondaryGrab()
 			// Get VRHandSocketComponent by SlotName
 			if(UVRHandSocketComponent* HandSocket = Cast<UVRHandSocketComponent>(UHandSocketComponent::GetHandSocketComponentFromObject(GrabObject, SlotName)))
 			{
+				// If grip laterality is incompatible with hand laterality, return false
+				if(IsCompatibleGrip(HandSocket->GetGripLaterality()) == false) return false;
+				
 				GripSlotPrefix = HandSocket->SlotPrefix;
 				
 				// Set hand pose as secondary grip on GrabObject, if secondary grip type is slot only or if adding secondary attach point succeeds
 				if(SecondaryGripType == ESecondaryGripType::SG_SlotOnly ||
-					OtherHand->MotionController->AddSecondaryAttachmentPoint(GrabObject, MotionController, GetSocketToHandRelativeTransform(SlotWorldTransform), true, 0.25f, true, SlotName))
+					OtherHand->MotionController->AddSecondaryAttachmentPoint(GrabObject, MotionController, FTransform(),true, 0.25f, true, SlotName))
 				{
 					AttachHandToComponent(GripType == EGripTargetType::ActorGrip ? Cast<AActor>(GrabObject)->GetRootComponent() : Cast<USceneComponent>(GrabObject), SlotWorldTransform);
 					
@@ -367,7 +380,38 @@ bool AGraspingHand::TrySecondaryGrab()
 	return false;
 }
 
+bool AGraspingHand::TryComponentGrab()
+{
+	// Check if there is a HandSocketComponent in range with the SlotPrefix "Component"
+	bool bHadSlot; FTransform SlotWorldTransform; FName SlotName;
+	IVRGripInterface::Execute_ClosestGripSlotInRange(GrabObject, MotionController->GetPivotLocation(), false, bHadSlot, SlotWorldTransform, SlotName, MotionController, FName("Component"));
+	if(bHadSlot)
+	{
+		// Get HandSocketComponent by SlotName
+		if(UVRHandSocketComponent* HandSocket = Cast<UVRHandSocketComponent>(UHandSocketComponent::GetHandSocketComponentFromObject(GrabObject, SlotName)))
+		{
+			// If grip laterality is incompatible with hand laterality, return false
+			if(IsCompatibleGrip(HandSocket->GetGripLaterality()) == false) return false;
 
+			// Get the attach parent component to the HandSocket
+			if(USceneComponent* AttachComponent = HandSocket->GetAttachParent())
+			{
+				// Grab AttachComponent by grip interface. If successful, continue
+				if(MotionController->GripObjectByInterface(AttachComponent, GetSocketToHandRelativeTransform(SlotWorldTransform), true, NAME_None, SlotName, true))
+				{
+					AttachHandToComponent(AttachComponent, SlotWorldTransform);
+
+					// Set hand animation to the hand socket pose
+					if(HandSocket->GetBlendedPoseSnapShot(HandPose)) HandAnimState = EHandAnimState::Custom;
+
+					return true;
+				}
+			}
+		}
+	}
+
+	return false;
+}
 
 void AGraspingHand::DefaultGrab()
 {

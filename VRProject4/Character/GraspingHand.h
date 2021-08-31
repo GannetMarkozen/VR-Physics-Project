@@ -7,6 +7,7 @@
 #include "VRBPDatatypes.h"
 #include "GameFramework/Actor.h"
 #include "Misc/OptionalRepSkeletalMeshActor.h"
+#include "VRProject4/VRHandSocketComponent.h"
 
 #include "GraspingHand.generated.h"
 
@@ -48,7 +49,7 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
 	class UVREPhysicsConstraintComponent* PhysicsConstraint;
-
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category="Fingers")
 	class UVREPhysicalAnimationComponent* PhysicalAnimation;
 
@@ -157,6 +158,9 @@ public:
 		const int32 OtherBodyIndex, const bool bFromSweep, const FHitResult& SweepResult);
 
 	UFUNCTION()
+	void OnMeshHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, const FVector NormalImpulse, const FHitResult& Hit);
+
+	UFUNCTION()
 	void GrabSphereEndOverlap(class UPrimitiveComponent* OverlappedComponent, class AActor* OtherActor, class UPrimitiveComponent* OtherComp, const int32 OtherBodyIndex);
 
 	// Calls a timeline that initiates finger curling in the FingerCurlComponent
@@ -176,10 +180,13 @@ private:
 	bool QueryGrabObject();
     
     // Tries to grab grabbable component by hand socket component if it has one
-    bool TryGrabBySocket();
+    bool TryPrimaryGrab();
 
 	// If TryGrabBySocket fails and the primary grip is held, query secondary grip
 	bool TrySecondaryGrab();
+
+	// If Primary and Secondary grips fail, query component grip. Component grip grabs onto whatever component the HandSocketComponent is attached to
+	bool TryComponentGrab();
 
 	// Default grip when all other grip implementations are fail
 	void DefaultGrab();
@@ -187,5 +194,9 @@ private:
 	// If query grab fails, try climbing
 	bool TryClimbing();
 
-	FTimerHandle ClearIgnoreActorsTimerHandle;
+	bool IsCompatibleGrip(const EGripLaterality GripLaterality) const
+	{
+		return GripLaterality == EGripLaterality::Ambidextrous || GripLaterality == EGripLaterality::LeftOnly && Laterality == ELaterality::Left ||
+			GripLaterality == EGripLaterality::RightOnly && Laterality == ELaterality::Right;
+	}
 };
