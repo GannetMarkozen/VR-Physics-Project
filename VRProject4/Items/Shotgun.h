@@ -73,6 +73,15 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category="Configurations")
 	float Spread = 15.f;
 
+	UPROPERTY(EditAnywhere, Category="Configurations")
+	int32 NumOfPellets = 9;
+
+	UPROPERTY(EditAnywhere, Category="Configurations")
+	float HitParticleSize = 1.f;
+
+	UPROPERTY(EditAnywhere, Category="Configurations")
+	float MuzzleFlashSize = 1.f;
+
 	UFUNCTION()
 	void OnActorGripped(UGripMotionControllerComponent* GrippingController, const FBPActorGripInformation& GripInformation);
 	
@@ -84,4 +93,8 @@ private:
 
 	UPROPERTY()
 	class UVRHandSocketComponent* SecondaryHandSocket;
+
+	TArray<FTimerHandle> QueryDestroyActorTimerHandles;
+
+	void DestroyAmmo() { QueryDestroyActorTimerHandles.RemoveAt(0, 1, true); }
 };

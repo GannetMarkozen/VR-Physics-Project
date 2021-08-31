@@ -41,11 +41,10 @@ void AShotgun::BeginPlay()
 			if(GripScript->GetClass() == UGS_GunTools::StaticClass())
 			{
 				GunTools = Cast<UGS_GunTools>(GripScript);
-				UE_LOG(LogTemp, Warning, TEXT("Gun Tools initialized"));
 				break;
 			}
 		}
-		if(!GunTools) UE_LOG(LogTemp, Warning, TEXT("Gun Tools uninitialized on %s"), *GetName());
+		if(!GunTools) PRINT("GunTools uninitialized on " + GetName());
 	}
 
 	TArray<UVRHandSocketComponent*> HandSockets;
@@ -58,23 +57,12 @@ void AShotgun::BeginPlay()
 			break;
 		}
 	}
-	if(!SecondaryHandSocket) UE_LOG(LogTemp, Warning, TEXT("SecondaryHandSocket uninitialized on %s"), *GetName());
+	if(!SecondaryHandSocket) PRINT("SecondaryHandSocket uninitialized on " + GetName());
 }
 
 void AShotgun::OnActorGripped(UGripMotionControllerComponent* GrippingController, const FBPActorGripInformation& GripInformation)
 {
-	if(GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("Actor Gripped"));
-	if(SecondaryHandSocket && GripInformation.SecondaryGripInfo.bHasSecondaryAttachment == true)
-	{
-		
-		FTransform SecondaryHandRelativeTransform = SecondaryHandSocket->GetComponentTransform().GetRelativeTransform(Slider->GetComponentTransform());
-		if(GrippingController->MotionSource == FName("Left")) SecondaryHandRelativeTransform.Mirror(EAxis::Y, EAxis::Y);
-
-		SecondaryHandRelativeTransform.SetScale3D(Slider->GetComponentScale());
-		
-		const bool bSuccessful = GrippingController->GripObjectByInterface(Slider, SecondaryHandRelativeTransform, true, NAME_None, NAME_None, true);
-		if(bSuccessful) UE_LOG(LogTemp, Warning, TEXT("%s Gripped Slide"), *GrippingController->GetName());
-	}
+	
 }
 
 void AShotgun::OnSliderHitPoint(const float SliderProgressPoint)
@@ -100,14 +88,10 @@ bool AShotgun::TryFire()
 {
 	if(bPrimed == false || Ammo <= 0) return false;
 
-	if(MuzzleFlash)
-		UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), MuzzleFlash, FTransform(FiringArrow->GetComponentRotation(), FiringArrow->GetComponentLocation(), FVector(1.f)));
-	if(FiringSound)
-		UGameplayStatics::PlaySoundAtLocation(GetWorld(), FiringSound, FiringArrow->GetComponentLocation());
-	
-	
+	if(MuzzleFlash) UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), MuzzleFlash, FTransform(FiringArrow->GetComponentRotation(), FiringArrow->GetComponentLocation(), FVector(MuzzleFlashSize)));
+	if(FiringSound) UGameplayStatics::PlaySoundAtLocation(GetWorld(), FiringSound, FiringArrow->GetComponentLocation());
 	TArray<FHitResult*> HitResults;
-	for(int32 i = 0; i < 9; i++)
+	for(int32 i = 0; i < NumOfPellets; i++)
 	{
 		FRotator AimRotation = FiringArrow->GetComponentRotation();
 		if(i != 0)
@@ -126,10 +110,8 @@ bool AShotgun::TryFire()
 		DrawDebugLine(GetWorld(), Start, bHit ? HitResult.ImpactPoint : End, FColor::Red, false, 2.f);
 		if(bHit)
 		{
-			if(HitParticle)
-				UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), HitParticle, FTransform(HitResult.ImpactNormal.Rotation(), HitResult.ImpactPoint, FVector(1.f)));
-			if(HitSound)
-				UGameplayStatics::PlaySoundAtLocation(GetWorld(), HitSound, HitResult.ImpactPoint);
+			if(HitParticle) UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), HitParticle, FTransform(HitResult.ImpactNormal.Rotation(), HitResult.ImpactPoint, FVector(HitParticleSize)));
+			if(HitSound) UGameplayStatics::PlaySoundAtLocation(GetWorld(), HitSound, HitResult.ImpactPoint);
 		}
 	}
 	
@@ -140,7 +122,7 @@ bool AShotgun::TryFire()
 void AShotgun::EjectShell()
 {
 	if(!AmmoClass) return;
-	if(const AActor* ShotgunShell = GetWorld()->SpawnActor<AActor>(AmmoClass, EjectionArrow->GetComponentLocation(), EjectionArrow->GetComponentRotation()))
+	if(AActor* ShotgunShell = GetWorld()->SpawnActor<AActor>(AmmoClass, EjectionArrow->GetComponentLocation(), EjectionArrow->GetComponentRotation()))
 	{
 		if(UPrimitiveComponent* Component = Cast<UPrimitiveComponent>(ShotgunShell->GetRootComponent()))
 		{
@@ -152,6 +134,10 @@ void AShotgun::EjectShell()
 			FVector AngularImpulse;
 			for(int32 i = 0; i < 2; i++) AngularImpulse[i] = FMath::RandRange(-EjectionSpeed, EjectionSpeed);
 			Component->AddAngularImpulseInDegrees(AngularImpulse);
+
+			QueryDestroyActorTimerHandles.Add(FTimerHandle());
+			const int32 LastIndex = QueryDestroyActorTimerHandles.Num() - 1;
+			if(LastIndex != -1) GetWorld()->GetTimerManager().SetTimer(QueryDestroyActorTimerHandles[LastIndex], ShotgunShell, &AActor::BeginDestroy, 0.f, false, 5.f);
 		}
 	}
 }

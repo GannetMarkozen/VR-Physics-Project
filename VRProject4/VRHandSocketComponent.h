@@ -22,10 +22,22 @@ class VRPROJECT4_API UVRHandSocketComponent : public UHandSocketComponent
 private:
 	UPROPERTY(EditDefaultsOnly, Category="Configurations")
 	EGripLaterality GripLaterality = EGripLaterality::Ambidextrous;
+
+	UPROPERTY(EditDefaultsOnly, Category="Configurations")
+	FTransform GripOffset;
+	
+	UPROPERTY(EditDefaultsOnly, Category="Configurations")
+	bool bUseHandTargetTransform = false;
 	
 public:
 	UFUNCTION(BlueprintCallable)
 	EGripLaterality GetGripLaterality() const { return GripLaterality; }
+
+	UFUNCTION(BlueprintCallable)
+	FTransform GetGripOffset() const { return GripOffset; }
+	
+	UFUNCTION(BlueprintCallable)
+	bool GetUseHandTargetTransform() const { return bUseHandTargetTransform; }
 	
 	virtual bool HasAllMatchingGameplayTags(const FGameplayTagContainer& TagContainer) const override { return false; }
 	virtual bool HasAnyMatchingGameplayTags(const FGameplayTagContainer& TagContainer) const override { return false; }

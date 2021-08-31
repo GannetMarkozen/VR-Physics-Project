@@ -125,8 +125,8 @@ void AGraspingHand::OnGrippedObject(const FBPActorGripInformation& GripInfo)
 	if(GripInfo.bIsSlotGrip && GripSlotPrefix == FName("Primary"))
 	{
 		InteractInterface = Cast<IInteractInterface>(GrabObject);
-		const FString Message = InteractInterface ? "has interact interface" : "does not have interact interface";
-		UE_LOG(LogTemp, Warning, TEXT("%s %s"), *GrabObject->GetName(), *Message);
+		const FString Message = InteractInterface ? " has interact interface" : " does not have interact interface";
+		if(GrabObject) PRINT("" + GrabObject->GetName() + Message);
 	}
 }
 
@@ -322,10 +322,22 @@ bool AGraspingHand::TryPrimaryGrab()
 
 			// Attach the hand to the component
 			AttachHandToComponent(GripType == EGripTargetType::ActorGrip ? Cast<AActor>(GrabObject)->GetRootComponent() : Cast<USceneComponent>(GrabObject), SlotWorldTransform);
-
-			// Grab object by interface and set custom pose if grab succeeds
+			
 			GripSlotPrefix = HandSocket->SlotPrefix;
-			if(MotionController->GripObjectByInterface(GrabObject, GetSocketToHandRelativeTransform(SlotWorldTransform), true, NAME_None, NAME_None, true))
+			
+			FTransform GripOffset = HandSocket->GetGripOffset();
+			if(Laterality == ELaterality::Left) GripOffset.Mirror(EAxis::Y, EAxis::Y);
+			
+			FTransform ObjectRelativeTransform = GetSocketToHandRelativeTransform(SlotWorldTransform);
+			if(HandSocket->GetUseHandTargetTransform())
+			{
+				FTransform Offset = HandSocket->GetGripOffset();
+				Offset.Mirror(EAxis::Y, EAxis::Y);
+				ObjectRelativeTransform *= Offset;
+			}
+			
+			// Grab object by interface and set custom pose if grab succeeds
+			if(MotionController->GripObjectByInterface(GrabObject, ObjectRelativeTransform, true, NAME_None, SlotName, true))
 			{
 				if(HandSocket->GetBlendedPoseSnapShot(HandPose)) HandAnimState = EHandAnimState::Custom;
 
@@ -340,11 +352,15 @@ bool AGraspingHand::TryPrimaryGrab()
 
 bool AGraspingHand::TrySecondaryGrab()
 {
-	const ESecondaryGripType SecondaryGripType = IVRGripInterface::Execute_SecondaryGripType(GrabObject);
-	if(SecondaryGripType == ESecondaryGripType::SG_None) return false;
+	const ESecondaryGripType SecondaryGripType = IVRGripInterface::Execute_SecondaryGripType(GripType == EGripTargetType::ActorGrip ? GrabObject : Cast<UActorComponent>(GrabObject)->GetOwner());
+	if(SecondaryGripType == ESecondaryGripType::SG_None)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Secondary Grip Type == SG_None"));
+		return false;
+	}
 	
 	// If there is no primary socket in range, query whether the other hand is holding this object in the Primary slot and whether this object allows multiple grips
-	if(OtherHand->GrabObject == GrabObject && OtherHand->GripSlotPrefix == FName("Primary"))
+	if(OtherHand->GrabObject == GrabObject || OtherHand->GrabObject == Cast<UActorComponent>(GrabObject)->GetOwner() && OtherHand->GripSlotPrefix == FName("Primary"))
 	{
 		// Check if there is a HandSocketComponent in range with the SlotPrefix "Secondary"
 		bool bHadSecondarySlot; FTransform SlotWorldTransform; FName SlotName;

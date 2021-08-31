@@ -2,4 +2,4 @@
 
 #pragma once
 
-#define PRINT(Text) if(GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, Text);
+#define PRINT(Text) if(GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, TEXT(Text));
