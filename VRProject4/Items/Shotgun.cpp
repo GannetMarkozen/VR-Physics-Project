@@ -29,8 +29,6 @@ AShotgun::AShotgun(const FObjectInitializer& ObjectInitializer) : Super(ObjectIn
 void AShotgun::BeginPlay()
 {
 	Super::BeginPlay();
-
-	PRINT(GetName());
 	
 	this->OnGripped.AddDynamic(this, &AShotgun::OnActorGripped);
 	Slider->OnSliderHitPoint.AddDynamic(this, &AShotgun::OnSliderHitPoint);
